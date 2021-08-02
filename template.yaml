@@ -86,6 +86,42 @@ Resources:
       Tags:
         - Key: Name
           Value: kubernetes
-  # TODO ELB
+  KubernetesLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: kubernetes
+      Subnets:
+        - Ref: KubernetesSubnet
+      Scheme: internet-facing
+      Type: network
+  KubernetesTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: kubernetes
+      Protocol: TCP
+      Port: 6443
+      VpcId:
+        Ref: KubernetesVPC
+      TargetType: ip
+      Targets:
+        - Id: 10.0.1.10
+        - Id: 10.0.1.11
+        - Id: 10.0.1.12
+  KubernetesListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn:
+        Ref: KubernetesLoadBalancer
+      Protocol: TCP
+      Port: 443
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn:
+            Ref: KubernetesTargetGroup
+
+  # Public Addresses
+  # !GetAtt KubernetesLoadBalancer.DNSName
+
+  # TODO SSH Key
   # TODO Controller instances
   # TODO Worker instances

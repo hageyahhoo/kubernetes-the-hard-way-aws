@@ -1,12 +1,16 @@
 AWSTemplateFormatVersion: '2010-09-09'
-# TODO Parameters
+
+Parameters:
+  KubernetesKey:
+    Type: AWS::EC2::KeyPair::KeyName
+
 Resources:
   KubernetesVPC:
     Type: AWS::EC2::VPC
     Properties:
       CidrBlock: 10.0.0.0/16
-      EnableDnsSupport: 'true'
-      EnableDnsHostnames: 'true'
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
       Tags:
         - Key: 'Name'
           Value: 'kubernetes-the-hard-way'
@@ -63,9 +67,9 @@ Resources:
       VpcId:
         Ref: KubernetesVPC
       SecurityGroupIngress:
-        - IpProtocol: -1
+        - IpProtocol: '-1'
           CidrIp: 10.0.0.0/16
-        - IpProtocol: -1
+        - IpProtocol: '-1'
           CidrIp: 10.200.0.0/16
         - IpProtocol: tcp
           FromPort: 22
@@ -118,10 +122,31 @@ Resources:
         - Type: forward
           TargetGroupArn:
             Ref: KubernetesTargetGroup
+  KubernetesController:
+    Type: AWS::EC2::Instance
+    Properties:
+      # FIXME AssociatePublicIpAddress: true
+      ImageId: ami-0b0ccc06abc611fa0
+      # FIXME Count
+      KeyName:
+        Ref: KubernetesKey
+      SecurityGroupIds:
+        - Ref: KubernetesSecurityGroup
+      InstanceType: t3.micro
+      # TODO 0/1/2
+      PrivateIpAddress: 10.0.1.10
+      # TODO 0/1/2
+      UserData:
+        Fn::Base64: !Sub |
+          name=controller-0
+      SubnetId:
+        Ref: KubernetesSubnet
+      BlockDeviceMappings:
+        - DeviceName: "/dev/sda1"
+          Ebs:
+            VolumeSize: 50
 
-  # Public Addresses
-  # !GetAtt KubernetesLoadBalancer.DNSName
-
-  # TODO SSH Key
-  # TODO Controller instances
   # TODO Worker instances
+
+  # TODO Get a public Addresses
+    # !GetAtt KubernetesLoadBalancer.DNSName

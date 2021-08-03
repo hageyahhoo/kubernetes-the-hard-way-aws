@@ -1,11 +1,152 @@
 AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  KubernetesKey:
+    Type: AWS::EC2::KeyPair::KeyName
+
 Resources:
   KubernetesVPC:
     Type: AWS::EC2::VPC
     Properties:
       CidrBlock: 10.0.0.0/16
-      EnableDnsSupport: 'true'
-      EnableDnsHostnames: 'true'
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
       Tags:
         - Key: 'Name'
           Value: 'kubernetes-the-hard-way'
+  KubernetesSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: KubernetesVPC
+      CidrBlock: 10.0.1.0/24
+      Tags:
+        - Key: Name
+          Value: kubernetes
+  KubernetesIGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: kubernetes
+  KubernetesVPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: KubernetesVPC
+      InternetGatewayId:
+        Ref: KubernetesIGW
+  KubernetesRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: KubernetesVPC
+      Tags:
+        - Key: Name
+          Value: kubernetes
+  KubernetesSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: KubernetesSubnet
+      RouteTableId:
+        Ref: KubernetesRouteTable
+  KubernetesRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: KubernetesIGW
+      RouteTableId:
+        Ref: KubernetesRouteTable
+  KubernetesSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: kubernetes
+      GroupDescription: Kubernetes security group
+      VpcId:
+        Ref: KubernetesVPC
+      SecurityGroupIngress:
+        - IpProtocol: '-1'
+          CidrIp: 10.0.0.0/16
+        - IpProtocol: '-1'
+          CidrIp: 10.200.0.0/16
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 6443
+          ToPort: 6443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: icmp
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: kubernetes
+  KubernetesLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: kubernetes
+      Subnets:
+        - Ref: KubernetesSubnet
+      Scheme: internet-facing
+      Type: network
+  KubernetesTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: kubernetes
+      Protocol: TCP
+      Port: 6443
+      VpcId:
+        Ref: KubernetesVPC
+      TargetType: ip
+      Targets:
+        - Id: 10.0.1.10
+        - Id: 10.0.1.11
+        - Id: 10.0.1.12
+  KubernetesListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn:
+        Ref: KubernetesLoadBalancer
+      Protocol: TCP
+      Port: 443
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn:
+            Ref: KubernetesTargetGroup
+  KubernetesController:
+    Type: AWS::EC2::Instance
+    Properties:
+      # FIXME AssociatePublicIpAddress: true
+      ImageId: ami-0b0ccc06abc611fa0
+      # FIXME Count
+      KeyName:
+        Ref: KubernetesKey
+      SecurityGroupIds:
+        - Ref: KubernetesSecurityGroup
+      InstanceType: t3.micro
+      # TODO 0/1/2
+      PrivateIpAddress: 10.0.1.10
+      # TODO 0/1/2
+      UserData:
+        Fn::Base64: !Sub |
+          name=controller-0
+      SubnetId:
+        Ref: KubernetesSubnet
+      BlockDeviceMappings:
+        - DeviceName: "/dev/sda1"
+          Ebs:
+            VolumeSize: 50
+
+  # TODO Worker instances
+
+  # TODO Get a public Addresses
+    # !GetAtt KubernetesLoadBalancer.DNSName
